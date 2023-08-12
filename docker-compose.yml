@@ -1,0 +1,69 @@
+version: "3"
+
+volumes:
+  media:
+    driver: local
+  jobtask_db_data:
+    driver: local
+
+services:
+  db:
+    image: postgres:13-alpine
+    build: devops/docker/postgres
+    restart: always
+    volumes:
+      - jobtask_db_data:/var/lib/postgresql@13/data
+    environment:
+      POSTGRES_USER: jobtask
+      POSTGRES_PASSWORD: y2QQvO_ISGr@A
+    ports:
+      - 5432:5432
+    networks:
+      - jobs_network
+  redis:
+    image: redis:alpine
+    networks:
+      - jobs_network
+  web:
+    build: .
+    image: jobtasks
+    command: >
+      sh -c "python manage.py migrate && python manage.py runserver 0.0.0.0:8000"
+    restart: always
+    tty: true
+    volumes:
+      - .:/app
+    ports:
+      - "8000:8000"
+    depends_on:
+      - redis
+      - db
+    networks:
+      - jobs_network
+
+  celery:
+    image: jobtasks
+    command: celery -A jobtask worker -l info
+    restart: always
+    depends_on:
+      - web
+      - redis
+      - db
+    networks:
+      - jobs_network
+  
+  celery-beat:
+    image: jobtasks
+    command: celery -A jobtask beat -l error
+    restart: always
+    depends_on:
+      - web
+      - redis
+      - db
+    networks:
+      - jobs_network
+
+networks:
+  jobs_network:
+    ipam:
+      driver: default
